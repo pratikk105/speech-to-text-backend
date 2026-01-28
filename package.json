@@ -10,9 +10,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "assemblyai": "^4.22.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "mongodb": "3.7",
+    "mongoose": "^9.1.5",
     "multer": "^2.0.2"
   }
 }
