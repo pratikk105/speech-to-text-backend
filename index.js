@@ -1,73 +1,62 @@
-const Transcription = require('./models/Transcription');
-
-// Inside your app.post('/api/transcribe'...)
-const transcript = await client.transcripts.transcribe({ audio: audioStream });
-
-// SAVE TO DATABASE
-const newEntry = new Transcription({ text: transcript.text });
-await newEntry.save(); 
-
-res.json({ text: transcript.text });
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const { AssemblyAI } = require('assemblyai');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// 1. MIDDLEWARE SETUP
-// We use origin: "*" to fix the "Check if backend is running" error
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"]
-}));
+// 1. MIDDLEWARE
+app.use(cors());
 app.use(express.json());
 
-// 2. DATABASE CONNECTION
+// 2. DATABASE CONNECTION (Using .then to avoid top-level await error)
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ Connected to MongoDB Atlas successfully!'))
-  .catch((err) => console.error('❌ MongoDB Connection Error:', err));
+  .then(() => console.log('✅ Connected to MongoDB Atlas!'))
+  .catch((err) => console.error('❌ Database error:', err));
 
-// 3. FILE UPLOAD (MULTER) CONFIG
-const upload = multer({ dest: 'uploads/' });
-
-// 4. ASSEMBLY AI CONFIG
-const client = new AssemblyAI({
-  apiKey: process.env.ASSEMBLY_API_KEY
+// 3. DATABASE SCHEMA
+const TranscriptionSchema = new mongoose.Schema({
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
 });
+const Transcription = mongoose.model('Transcription', TranscriptionSchema);
 
-const fs = require('fs'); // Add this at the top of index.js
+// 4. CONFIGURATION
+const upload = multer({ dest: 'uploads/' });
+const client = new AssemblyAI({ apiKey: process.env.ASSEMBLY_API_KEY });
 
+// 5. TRANSCRIBE ROUTE
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
-    console.log('🎤 File received. Uploading to AI...');
-
-    // Use a ReadStream to send the file safely
+    console.log('🎤 Received file, sending to AI...');
     const audioStream = fs.createReadStream(req.file.path);
     
-    const transcript = await client.transcripts.transcribe({
-      audio: audioStream
-    });
+    // The await is allowed here because it is inside an "async" function
+    const transcript = await client.transcripts.transcribe({ audio: audioStream });
 
-    console.log('✅ Success!');
+    // Save to MongoDB
+    const newEntry = new Transcription({ text: transcript.text });
+    await newEntry.save();
+    console.log('💾 Saved to database!');
+
     res.json({ text: transcript.text });
-
-    // Clean up: Delete the file from 'uploads' folder after sending
-    fs.unlinkSync(req.file.path);
+    
+    // Clean up local file
+    fs.unlinkSync(req.file.path); 
 
   } catch (error) {
-    console.error('❌ AI Error Details:', error);
-    res.status(500).json({ error: 'AI failed to process the file.' });
+    console.error('❌ AI Error:', error);
+    res.status(500).json({ error: 'Transcription failed' });
   }
 });
 
-// 6. START SERVER
-app.listen(8000, '0.0.0.0', () => {
-  console.log("🚀 Server is live on http://127.0.0.1:8000");
+// 6. SERVER START
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
