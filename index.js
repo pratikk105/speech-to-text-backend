@@ -10,7 +10,12 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // 1. MIDDLEWARE
-app.use(cors());
+// REPLACE your old app.use(cors(...)) with this exactly:
+app.use(cors({
+  origin: "*", 
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 
 // 2. DATABASE CONNECTION (Using .then to avoid top-level await error)
